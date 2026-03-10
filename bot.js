@@ -1,47 +1,37 @@
 // bot.js
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@adiwajshing/baileys/lib/index')
-const { state, saveState } = useSingleFileAuthState('./auth_info.json')
-const P = require('pino') // Para logging
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@adiwajshing/baileys')
+const fs = require('fs')
 const qrcode = require('qrcode-terminal')
+const P = require('pino')
 
-// Función principal para iniciar el bot
 async function startBot() {
-  const { version, isLatest } = await fetchLatestBaileysVersion()
-  console.log('Baileys version:', version, 'Latest?', isLatest)
+  const { version } = await fetchLatestBaileysVersion()
+  console.log('Usando Baileys v', version)
 
-  // Crear socket
+  // Aquí usamos multiFileAuthState porque v5.0.0 no tiene singleFileAuthState
+  const { state, saveCreds } = await useMultiFileAuthState('auth_info') // genera carpeta auth_info
+
   const sock = makeWASocket({
     version,
+    logger: P({ level: 'silent' }),
     printQRInTerminal: true,
-    auth: state,
-    logger: P({ level: 'silent' })
+    auth: state
   })
 
-  // Guardar estado de autenticación cuando cambie
-  sock.ev.on('creds.update', saveState)
+  sock.ev.on('creds.update', saveCreds)
 
-  // Detectar conexión y desconexión
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update
-
-    if (qr) {
-      console.log('Escanea este QR con tu WhatsApp:')
-      qrcode.generate(qr, { small: true })
-    }
-
+    if (qr) qrcode.generate(qr, { small: true })
     if (connection === 'close') {
-      const reason = lastDisconnect.error?.output?.statusCode
+      const reason = lastDisconnect?.error?.output?.statusCode
       console.log('Conexión cerrada, código:', reason)
-      // Reintentar
-      if (reason !== DisconnectReason.loggedOut) {
-        startBot()
-      }
+      if (reason !== DisconnectReason.loggedOut) startBot()
     } else if (connection === 'open') {
       console.log('Conectado a WhatsApp!')
     }
   })
 
-  // Escuchar mensajes
   sock.ev.on('messages.upsert', async (msg) => {
     const message = msg.messages[0]
     if (!message.message || message.key.fromMe) return
@@ -49,14 +39,12 @@ async function startBot() {
     const sender = message.key.remoteJid
     const text = message.message.conversation || ''
 
-    console.log('Mensaje recibido de', sender, ':', text)
+    console.log('Mensaje de', sender, ':', text)
 
-    // Responder a cualquier mensaje
     if (text.toLowerCase() === 'hola') {
-      await sock.sendMessage(sender, { text: '¡Hola! Soy tu StickerBot 🐱‍👤' })
+      await sock.sendMessage(sender, { text: '¡Hola! StickerBot activo 🐱‍👤' })
     }
   })
 }
 
-// Iniciar bot
 startBot()
