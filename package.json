@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "bot.js",
   "dependencies": {
-    "@adiwajshing/baileys": "^5.0.3",
+    "@adiwajshing/baileys": "git+https://github.com/adiwajshing/Baileys.git",
     "qrcode-terminal": "^0.12.0",
     "fs-extra": "^11.1.1"
   },
