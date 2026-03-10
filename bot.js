@@ -2,13 +2,11 @@ const makeWASocket = require("@adiwajshing/baileys").default;
 const Pino = require("pino");
 const fs = require("fs");
 const path = require("path");
-const qrcode = require("qrcode-terminal");
 
-// Archivo para mantener la sesión
 const AUTH_FILE = path.join("/mnt", "auth_info.json");
 let auth = {};
 
-// Carga sesión si existe
+// Carga auth si existe
 if (fs.existsSync(AUTH_FILE)) {
     auth = JSON.parse(fs.readFileSync(AUTH_FILE, "utf-8"));
 }
@@ -20,9 +18,9 @@ const sock = makeWASocket({
     auth
 });
 
-// Guardar sesión cada vez que se actualice
+// Guardar credenciales actualizadas
 sock.ev.on('creds.update', () => {
-    fs.writeFileSync(AUTH_FILE, JSON.stringify(sock.authState, null, 2));
+    fs.writeFileSync(AUTH_FILE, JSON.stringify(sock.auth, null, 2));
 });
 
 // Mensajes entrantes
@@ -40,17 +38,14 @@ sock.ev.on('messages.upsert', async (m) => {
     }
 });
 
-// Manejo de desconexiones
+// Conexión y reconexión
 sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
 
     if (connection === 'close') {
         const reason = lastDisconnect?.error?.output?.statusCode || "unknown";
         console.log(`Conexión cerrada, código: ${reason}`);
-
-        // Reconectar si no se cerró por logout
-        if (reason !== 401 /* logged out */) {
-            console.log('Intentando reconectar en 5s...');
+        if (reason !== 401) { // no logout
             setTimeout(() => sock.connect(), 5000);
         }
     } else if (connection === 'open') {
