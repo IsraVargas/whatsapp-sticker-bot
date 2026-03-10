@@ -1,97 +1,62 @@
-const { default: makeWASocket, DisconnectReason, useSingleFileAuthState, fetchLatestBaileysVersion } = require('@adiwajshing/baileys')
-const P = require('pino')
-const qrcode = require('qrcode-terminal')
-const fs = require('fs-extra')
-
+// bot.js
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@adiwajshing/baileys/lib/index')
 const { state, saveState } = useSingleFileAuthState('./auth_info.json')
+const P = require('pino') // Para logging
+const qrcode = require('qrcode-terminal')
 
+// Función principal para iniciar el bot
 async function startBot() {
+  const { version, isLatest } = await fetchLatestBaileysVersion()
+  console.log('Baileys version:', version, 'Latest?', isLatest)
 
-    const { version } = await fetchLatestBaileysVersion()
+  // Crear socket
+  const sock = makeWASocket({
+    version,
+    printQRInTerminal: true,
+    auth: state,
+    logger: P({ level: 'silent' })
+  })
 
-    const sock = makeWASocket({
-        version,
-        auth: state,
-        printQRInTerminal: true,
-        logger: P({ level: 'silent' }),
-    })
+  // Guardar estado de autenticación cuando cambie
+  sock.ev.on('creds.update', saveState)
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update
-        if (qr) {
-            console.log("📲 Escanea este QR en tu teléfono")
-            qrcode.generate(qr, { small: true })
-        }
-        if (connection === 'close') {
-            const reason = lastDisconnect?.error?.output?.statusCode
-            console.log('🔴 Conexión cerrada, motivo:', reason)
-            if (reason !== DisconnectReason.loggedOut) {
-                startBot() // reconectar automáticamente
-            }
-        }
-        if (connection === 'open') {
-            console.log("🤖 BOT CONECTADO")
-        }
-    })
+  // Detectar conexión y desconexión
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect, qr } = update
 
-    sock.ev.on('creds.update', saveState)
+    if (qr) {
+      console.log('Escanea este QR con tu WhatsApp:')
+      qrcode.generate(qr, { small: true })
+    }
 
-    // Manejo de mensajes
-    sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0]
-        if (!msg.message || msg.key.fromMe) return
+    if (connection === 'close') {
+      const reason = lastDisconnect.error?.output?.statusCode
+      console.log('Conexión cerrada, código:', reason)
+      // Reintentar
+      if (reason !== DisconnectReason.loggedOut) {
+        startBot()
+      }
+    } else if (connection === 'open') {
+      console.log('Conectado a WhatsApp!')
+    }
+  })
 
-        const sender = msg.key.remoteJid
-        const body = msg.message.conversation || msg.message?.extendedTextMessage?.text
-        if (!body) return
+  // Escuchar mensajes
+  sock.ev.on('messages.upsert', async (msg) => {
+    const message = msg.messages[0]
+    if (!message.message || message.key.fromMe) return
 
-        const command = body.toLowerCase()
+    const sender = message.key.remoteJid
+    const text = message.message.conversation || ''
 
-        console.log("📩", sender, ":", body)
+    console.log('Mensaje recibido de', sender, ':', text)
 
-        // !ping
-        if (command === "!ping") {
-            await sock.sendMessage(sender, { text: "pong 🏓" })
-            return
-        }
-
-        // !menu
-        if (command === "!menu") {
-            const menuText = `🤖 BOTARDO
-
-Comandos:
-
-!ping → probar bot
-!id → ver id del chat
-!sticker → crear sticker (responde a una imagen)
-
-Uso sticker: responde a una imagen con !sticker
-`
-            await sock.sendMessage(sender, { text: menuText })
-            return
-        }
-
-        // !id
-        if (command === "!id") {
-            const senderName = msg.pushName || "Desconocido"
-            await sock.sendMessage(sender, {
-                text: `Chat ID:\n${sender}\n\nAutor:\n${senderName}`
-            })
-            return
-        }
-
-        // !sticker
-        if (command === "!sticker") {
-            const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage
-            if (!quoted || !quoted.imageMessage) {
-                await sock.sendMessage(sender, { text: "⚠️ Responde a una imagen con !sticker" })
-                return
-            }
-
-            const media = await sock.downloadMediaMessage({ message: quoted.imageMessage, filename: 'sticker.jpg' })
-            await sock.sendMessage(sender, { sticker: media })
-        }
-    })
+    // Responder a cualquier mensaje
+    if (text.toLowerCase() === 'hola') {
+      await sock.sendMessage(sender, { text: '¡Hola! Soy tu StickerBot 🐱‍👤' })
+    }
+  })
 }
 
+// Iniciar bot
 startBot()
