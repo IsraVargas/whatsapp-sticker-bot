@@ -1,44 +1,53 @@
 // bot.js
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason } = require("@adiwajshing/baileys");
-const { state, saveState } = useSingleFileAuthState('./auth_info.json');
-const qrcode = require('qrcode-terminal');
+const makeWASocket = require("@adiwajshing/baileys").default;
+const fs = require("fs");
+const qrcode = require("qrcode-terminal");
+
+// Carga de credenciales existentes o inicializa nuevas
+let auth = { creds: {} };
+const authFile = './auth_info.json';
+
+if (fs.existsSync(authFile)) {
+    auth = JSON.parse(fs.readFileSync(authFile, 'utf-8'));
+}
+
+// Guardar credenciales cuando cambien
+function saveAuth() {
+    fs.writeFileSync(authFile, JSON.stringify(auth, null, 2));
+}
 
 async function startBot() {
     const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: true // muestra QR en consola para escanear si no hay auth
+        auth
     });
 
-    // Guardar credenciales cuando se actualicen
-    sock.ev.on('creds.update', saveState);
-
-    // Escuchar QR si es necesario
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr) {
-            // Mostrar QR en consola si no se ha autenticado
             qrcode.generate(qr, { small: true });
-            console.log("Escanea este QR con WhatsApp para autenticar el bot");
+            console.log("Escanea este QR con WhatsApp");
         }
 
         if (connection === 'close') {
             const reason = lastDisconnect?.error?.output?.statusCode;
             console.log('Conexión cerrada, código:', reason);
-            // Reconectar automáticamente si la sesión no fue cerrada por el usuario
-            if (reason !== DisconnectReason.loggedOut) {
+            if (reason !== 401) { // 401 = loggedOut
                 startBot();
             } else {
-                console.log('La sesión se cerró, escanea el QR de nuevo');
+                console.log("Sesión cerrada, escanea el QR de nuevo");
             }
         }
 
         if (connection === 'open') {
-            console.log('Bot conectado correctamente!');
+            console.log('Bot conectado!');
         }
     });
 
-    // Ejemplo: recibir mensajes
+    sock.ev.on('creds.update', () => {
+        saveAuth();
+    });
+
     sock.ev.on('messages.upsert', (m) => {
         console.log('Mensaje recibido:', m);
     });
