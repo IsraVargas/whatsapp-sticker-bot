@@ -29,16 +29,18 @@ client.on('message_create', async msg => {
 
     const command = msg.body.toLowerCase()
 
+    const chat = await msg.getChat()
+
     // ping
     if (command === "!ping") {
-        await msg.reply("pong 🏓")
+        await chat.sendMessage("pong 🏓")
         return
     }
 
     // menu
     if (command === "!menu") {
 
-        await msg.reply(`🤖 BOTARDO
+        await chat.sendMessage(`🤖 BOTARDO
 
 Comandos:
 
@@ -49,14 +51,13 @@ Comandos:
 Uso sticker:
 responde a una imagen o video con !sticker
 `)
-
         return
     }
 
-    // obtener id
+    // id
     if (command === "!id") {
 
-        await msg.reply(
+        await chat.sendMessage(
             "Chat ID:\n" + msg.from +
             "\n\nAutor:\n" + (msg.author || "chat privado")
         )
@@ -64,16 +65,16 @@ responde a una imagen o video con !sticker
         return
     }
 
-    // crear sticker
+    // sticker
     if (command === "!sticker") {
 
         let media = null
 
         if (msg.hasMedia) {
-
             media = await msg.downloadMedia()
+        }
 
-        } else if (msg.hasQuotedMsg) {
+        else if (msg.hasQuotedMsg) {
 
             const quoted = await msg.getQuotedMessage()
 
@@ -84,16 +85,15 @@ responde a una imagen o video con !sticker
         }
 
         if (!media) {
-            await msg.reply("⚠️ responde a una imagen o video")
+            await chat.sendMessage("⚠️ responde a una imagen o video")
             return
         }
 
-        await client.sendMessage(msg.from, media, {
+        await chat.sendMessage(media, {
             sendMediaAsSticker: true,
             stickerAuthor: "Botardo",
             stickerName: "Sticker"
         })
-
     }
 
 })
